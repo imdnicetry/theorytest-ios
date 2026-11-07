@@ -44,6 +44,46 @@ workflows:
       - artifacts/**
       - build/Build/Products/Debug-iphonesimulator/*.app
 
+  ios-video:
+    name: App Review screen recording (simulator)
+    instance_type: mac_mini_m2
+    max_build_duration: 40
+    environment:
+      xcode: latest
+    scripts:
+      - name: Unpack project
+        script: |
+          if [ -f project.zip ]; then unzip -oq project.zip; fi
+      - name: Build for simulator
+        script: |
+          xcodebuild -project TheoryTestIRL.xcodeproj -scheme TheoryTestIRL \
+            -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+      - name: Record app walkthrough
+        script: |
+          set -x
+          mkdir -p artifacts
+          DEVICE=$(xcrun simctl list devices available | grep -E "iPhone 1[5-7] Pro \(" | head -1 | sed -E 's/^ *(.*) \(([0-9A-F-]+)\).*/\2/')
+          [ -z "$DEVICE" ] && DEVICE=$(xcrun simctl list devices available | grep -m1 "iPhone" | sed -E 's/^ *(.*) \(([0-9A-F-]+)\).*/\2/')
+          xcrun simctl list devices available | grep "$DEVICE" > artifacts/device.txt
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl status_bar "$DEVICE" override --time "9:41" --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4 || true
+          APP=$(find build/Build/Products/Debug-iphonesimulator -maxdepth 1 -name "*.app" | head -1)
+          xcrun simctl install "$DEVICE" "$APP"
+          sleep 5
+          xcrun simctl io "$DEVICE" recordVideo --codec=h264 --force artifacts/app_review_recording.mp4 &
+          REC=$!
+          sleep 3
+          xcrun simctl launch "$DEVICE" ie.driverzoneireland.theorytest -video
+          sleep 120
+          kill -INT $REC
+          wait $REC || true
+          ls -la artifacts
+    artifacts:
+      - artifacts/**
+
   ios-release:
     name: App Store release
     instance_type: mac_mini_m2
