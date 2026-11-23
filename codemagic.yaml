@@ -15,6 +15,15 @@ workflows:
         script: |
           if [ -f project.zip ]; then unzip -oq project.zip; fi
           ls
+      - name: Set up keychain
+        script: keychain initialize
+      - name: Fetch signing files
+        script: |
+          app-store-connect fetch-signing-files "ie.driverzoneireland.theorytest" \
+            --type IOS_APP_STORE \
+            --create
+      - name: Add certificates to keychain
+        script: keychain add-certificates
       - name: Use signing profiles
         script: xcode-project use-profiles
       - name: Build IPA
